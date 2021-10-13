@@ -53,16 +53,25 @@ Begin {
 
 Process {
     # This will show a verbose statement indicating what computer is about to be controlled.
-    $PSCmdlet.ShouldProcess("$computer","Invoke-Command")
+    if ( $PSCmdlet.ShouldProcess("$computer","Invoke-Command") ) { }
 
+    # This allows us to use the Speech.Synthesis on remote computers.
     Invoke-Command -ComputerName $computer -ScriptBlock {
-        Add-Type -AssemblyName System.Speech
-        $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer
-        $voiceEngine.Rate = $using:rate
+        try {
+            Add-Type -AssemblyName System.Speech
+            $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer
+            $voiceEngine.Rate = $using:rate
+            # $voiceEngine.Volume 
+            # $voiceEngine.Voice
         
-        $voiceEngine.Speak($using:say)
+            $voiceEngine.Speak($using:say)
+        }
+        catch {
 
-        $voiceEngine.Dispose()
+        }
+        finally {
+            $voiceEngine.Dispose()
+        }
     }
 }
 
