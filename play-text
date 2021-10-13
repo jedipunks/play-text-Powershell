@@ -52,6 +52,7 @@ Begin {
 }
 
 Process {
+    # This will show a verbose statement indicating what computer is about to be controlled.
     $PSCmdlet.ShouldProcess("$computer","Invoke-Command")
 
     Invoke-Command -ComputerName $computer -ScriptBlock {
