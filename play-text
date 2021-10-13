@@ -58,8 +58,8 @@ Process {
     # This allows us to use the Speech.Synthesis on remote computers.
     Invoke-Command -ComputerName $computer -ScriptBlock {
         try {
-            Add-Type -AssemblyName System.Speech
-            $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer
+            Add-Type -AssemblyName System.Speech -ErrorAction Stop -ErrorVariable EV
+            $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer -ErrorAction Stop -ErrorVariable EV
             $voiceEngine.Rate = $using:rate
             # $voiceEngine.Volume 
             # $voiceEngine.Voice
@@ -67,7 +67,12 @@ Process {
             $voiceEngine.Speak($using:say)
         }
         catch {
-
+            Write-Host " Error in the try block. " -ForegroundColor Blue -BackgroundColor Gray
+            if ( $ErrorLog ) {
+                Get-Date | Out-File $LogFile -Force
+                $computer | Out-File $LogFile -Append
+                $EV | Out-File $LogFile -Append
+            }
         }
         finally {
             $voiceEngine.Dispose()
