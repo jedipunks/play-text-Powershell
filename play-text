@@ -1,0 +1,72 @@
+# https://docs.microsoft.com/en-us/dotnet/api/system.speech.synthesis.speechsynthesizer.rate?view=netframework-4.8
+
+function error_log_write($err_msg) {
+    if ( -not ( Test-Path $env:TEMP\errorlog.txt ) ) {
+        New-Item $env:TEMP\errorlog.txt
+    }
+    Out-File -FilePath $env:TEMP\errorlog.txt -Append -InputObject $err_msg
+}
+
+function Play-Text {
+<#
+.SYNOPSIS
+Make the computer talk.
+
+.DESCRIPTION
+Makes that computer clap on command!
+
+.PARAMETER say
+Type the text to be played by Speech Synthesis.
+
+.EXAMPLE
+Play-Text -say "Hello"
+Plays string using the default Windows voice.
+.EXAMPLE
+Play-Text -say "hello there" -computer hoth
+Plays string using the default Windows voice on a remote computer. Can also use hostname, host, or computername as an alias for computer.
+#>
+[CmdletBinding(SupportsShouldProcess)]
+param(
+
+[Parameter (Mandatory = $true, Position=0)]
+[string[]] $say,
+
+[Parameter ( )]
+[alias('hostname','computername','host')]
+[ValidateLength(1,15)]
+[string] $computer = 'localhost',
+
+[Parameter (Mandatory = $false )]
+[ValidateRange(1,10)]
+[int] $rate = 1,
+
+[Parameter ()]
+[switch] $ErrorLog,
+
+[Parameter ()]
+[String] $Errors
+)
+
+Begin {
+
+}
+
+Process {
+    $PSCmdlet.ShouldProcess("$computer","Invoke-Command")
+
+    Invoke-Command -ComputerName $computer -ScriptBlock {
+        Add-Type -AssemblyName System.Speech
+        $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer
+        $voiceEngine.Rate = $using:rate
+        
+        $voiceEngine.Speak($using:say)
+
+        $voiceEngine.Dispose()
+    }
+}
+
+End {
+
+}
+
+}
