@@ -1,5 +1,8 @@
 # https://docs.microsoft.com/en-us/dotnet/api/system.speech.synthesis.speechsynthesizer.rate?view=netframework-4.8
 
+write-host "Script Name: $($MyInvocation.MyCommand.Name)"
+Write-Host "Script Location: $($MyInvocation.MyCommand.Path)"
+
 function error_log_write($err_msg) {
     if ( -not ( Test-Path $env:TEMP\errorlog.txt ) ) {
         New-Item $env:TEMP\errorlog.txt
@@ -34,48 +37,147 @@ param(
 [Parameter ( )]
 [alias('hostname','computername','host')]
 [ValidateLength(1,15)]
-[string] $computer = 'localhost',
+[string[]] $computer = 'localhost',
 
 [Parameter (Mandatory = $false )]
-[ValidateRange(1,10)]
+#[ValidateRange(1,10)]
 [int] $rate = 1,
 
-[Parameter ()]
-[switch] $ErrorLog,
+[Parameter (Mandatory = $false )]
+#[ValidateRange(1,100)]
+[int] $volume = 100,
+
+[Parameter (Mandatory = $false )]
+#[ValidateSet("male","female")]
+[String] $voice = "male",
 
 [Parameter ()]
-[String] $Errors
+[switch] [boolean]$ErrorLog,
+
+[Parameter ()]
+[switch] [boolean]$ShowLog
+
 )
 
 Begin {
+    if ( $PSBoundParameters.ContainsKey('ErrorLog') ) {
+        if ( -not ( Test-Path $env:TEMP\errorlog.txt ) ) {
+            New-Item $env:TEMP\errorlog.txt -InformationAction SilentlyContinue
+        }
+        $LogFile = "$env:TEMP\errorlog.txt"
+    } else { $LogFile = $null }
 
+    switch ( $voice ) {
+        "male" { $voiceSelect = "Microsoft David Desktop" }
+        "female" { $voiceSelect = "Microsoft Zira Desktop" }
+        Default {
+            Write-Debug "User input: `$voice = $voice"
+            Write-Host "Voice selection is incorrect. Must be 'male' or 'female'. Default voice male will be used." -ForegroundColor Yellow
+            $voiceSelect = "Microsoft David Desktop"
+        }
+    }
+    Write-Debug "User input: `$voiceSelect = $voiceSelect"
+
+    if ( ($rate -le 0) -or ( $rate -ge 11 ) ) {
+        Write-Debug "User input: `$rate"
+        Write-Host "Rate is out of range. Rate should be 1 to 10. Default rate of 1 will be used." -ForegroundColor Yellow
+        $rate = 1
+    }
+
+    if ( ( $volume -le 0) -or ( $volume -ge 101 ) ) {
+        Write-Debug "User input: `$volume = $volume"
+        Write-Host "Volume is out of range. Volume should be 1 to 100. Default volume of 100 will be used." -ForegroundColor Yellow
+        $volume = 100
+    }
+
+    Write-Host "Volume: $volume" -ForegroundColor Cyan
+    Write-Host "Rate : $rate" -ForegroundColor Cyan
+    Write-Host "Voice: $voiceSelect" -ForegroundColor Cyan
 }
 
 Process {
     # This will show a verbose statement indicating what computer is about to be controlled.
     if ( $PSCmdlet.ShouldProcess("$computer","Invoke-Command") ) { }
 
-    # This allows us to use the Speech.Synthesis on remote computers.
-    Invoke-Command -ComputerName $computer -ScriptBlock {
+    if ( $computer -eq "localhost" ) {
+        Write-Debug "Inside localhost IF condition"
         try {
+            Write-Debug "Attempting to add assembly.."
             Add-Type -AssemblyName System.Speech -ErrorAction Stop -ErrorVariable EV
             $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer -ErrorAction Stop -ErrorVariable EV
-            $voiceEngine.Rate = $using:rate
-            # $voiceEngine.Volume 
-            # $voiceEngine.Voice
+            $voiceEngine.Rate = $rate
+            $voiceEngine.Volume = $volume
+            $voiceName = ($voiceEngine.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo).Name
+            # Microsoft David Desktop
+            # Microsoft Zira Desktop
+            Write-Debug "Searching for installed voice.."
+            if ( $voiceName -contains $voiceSelect) {
+                Write-Debug "The voice is installed. Selecting it."
+                $voiceEngine.SelectVoice($voiceSelect)
+            }
+            else {
+                Write-Debug "The voice is not installed, using default."
+                Write-Host "$voiceSelect not found. Using system default, $($voiceName[0])"
+                $voiceEngine.SelectVoice($voiceName[0])
+            }
         
-            $voiceEngine.Speak($using:say)
+            Write-Debug "Sendig speak command to Synthesizer."
+            $voiceEngine.Speak($say)
         }
         catch {
-            Write-Host " Error in the try block. " -ForegroundColor Blue -BackgroundColor Gray
+            Write-Host " Error in the try block. $env:computername" -ForegroundColor Blue
             if ( $ErrorLog ) {
-                Get-Date | Out-File $LogFile -Force
+                Get-Date | Out-File $LogFile -Append -Force
                 $computer | Out-File $LogFile -Append
-                $EV | Out-File $LogFile -Append
+                foreach ($a in $EV) {
+                    $EV[$a] | Out-File $LogFile -Append
+                }
+                #$EV | Out-File $LogFile -Append
+                if ($ShowLog) { Get-Content $LogFile }
             }
         }
         finally {
             $voiceEngine.Dispose()
+        }
+    }
+    else {
+        # This allows us to use the Speech.Synthesis on remote computers.
+        Invoke-Command -ComputerName $computer -ScriptBlock {
+            try {
+                Add-Type -AssemblyName System.Speech -ErrorAction Stop -ErrorVariable EV
+                $voiceEngine = New-Object System.Speech.Synthesis.SpeechSynthesizer -ErrorAction Stop -ErrorVariable EV
+                $voiceEngine.Rate = $using:rate
+                $voiceEngine.Volume = $using:volume
+                $voiceName = ($voiceEngine.GetInstalledVoices() | Select-Object -ExpandProperty VoiceInfo).Name
+                # Microsoft David Desktop
+                # Microsoft Zira Desktop
+                if ( $voiceName -contains $using:voiceSelect) {
+                    Write-Debug "The voice is installed. Selecting it."
+                    $voiceEngine.SelectVoice($using:voiceSelect)
+                }
+                else {
+                    Write-Debug "The voice is not installed, using default."
+                    Write-Host "$using:voiceSelect not found. Using system default, $($voiceName[0])"
+                    $voiceEngine.SelectVoice($voiceName[0])
+                }
+            
+                $voiceEngine.Speak($using:say)
+            }
+            catch {
+                Write-Host " Error in the try block. $env:computername" -ForegroundColor Blue
+                if ( $using:ErrorLog ) {
+                    Get-Date | Out-File $using:LogFile -Append -Force
+                    $computer | Out-File $using:LogFile -Append
+                    foreach ($a in $EV) {
+                        $EV[$a] | Out-File $using:LogFile -Append
+                    }
+                    #$EV | Out-File $using:LogFile -Append
+                    if ($using:ShowLog) { Get-Content $using:LogFile }
+                }
+            }
+            finally {
+                $voiceEngine.Dispose()
+            }
         }
     }
 }
